@@ -51,7 +51,7 @@ class status : AppCompatActivity() {
 
     // Load the TFLite model
     fun loadModelFile(context: Context): MappedByteBuffer {
-        val fileDescriptor: AssetFileDescriptor = context.assets.openFd("yolov5s-fp16.tflite")
+        val fileDescriptor: AssetFileDescriptor = context.assets.openFd("yolov5s-fp16 (1).tflite")
         val inputStream = fileDescriptor.createInputStream()
         val fileChannel: FileChannel = inputStream.channel
         val startOffset = fileDescriptor.startOffset

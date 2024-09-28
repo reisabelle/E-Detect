@@ -1,32 +1,33 @@
 package com.example.e_detect
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.AssetFileDescriptor
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import android.net.Uri
-import android.provider.MediaStore
 import org.tensorflow.lite.Interpreter
 import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
-import android.content.res.AssetFileDescriptor
-import android.content.Context
-import android.graphics.Bitmap
-import java.io.IOException
 
 class status : AppCompatActivity() {
     private lateinit var backbtn: ImageView
     private lateinit var imageView: ImageView
     private lateinit var diseaseTextView: TextView
+    private lateinit var confidenceTextView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_status)
 
-        imageView = findViewById(R.id.imageView2) // Link to your ImageView in the layout
-        diseaseTextView = findViewById(R.id.disease) // Link to your TextView for displaying the result
+        imageView = findViewById(R.id.imageView2) // ImageView in your layout
+        diseaseTextView = findViewById(R.id.disease) // TextView for classification result
+        confidenceTextView = findViewById(R.id.confidence) // TextView for confidence
 
         // Get the image URI from the intent
         val imageUri = intent.getStringExtra("imageUri")
@@ -38,8 +39,9 @@ class status : AppCompatActivity() {
             imageView.setImageBitmap(bitmap)
 
             // Preprocess and classify the image
-            val result = classifyImage(bitmap)
+            val (result, confidence) = classifyImage(bitmap)
             diseaseTextView.text = result // Display the classification result in the TextView
+            confidenceTextView.text = confidence // Display confidence levels
         }
 
         backbtn = findViewById(R.id.backbtn)
@@ -51,7 +53,7 @@ class status : AppCompatActivity() {
 
     // Load the TFLite model
     fun loadModelFile(context: Context): MappedByteBuffer {
-        val fileDescriptor: AssetFileDescriptor = context.assets.openFd("yolov5s-fp16 (1).tflite")
+        val fileDescriptor: AssetFileDescriptor = context.assets.openFd("model(1).tflite")
         val inputStream = fileDescriptor.createInputStream()
         val fileChannel: FileChannel = inputStream.channel
         val startOffset = fileDescriptor.startOffset
@@ -61,9 +63,9 @@ class status : AppCompatActivity() {
 
     // Preprocess the image before feeding into the model
     fun preprocessImage(bitmap: Bitmap): ByteBuffer {
-        val inputSize = 640 // Input size for YOLOv5 model
+        val inputSize = 224 // Updated input size for your model
         val byteBuffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4) // float32 input
-        byteBuffer.rewind()
+        byteBuffer.order(java.nio.ByteOrder.nativeOrder())
 
         // Resize the image to the input size
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, false)
@@ -80,12 +82,8 @@ class status : AppCompatActivity() {
         return byteBuffer
     }
 
-
-    // Function to classify the image
-
-
-    // Function to classify the image
-    fun classifyImage(bitmap: Bitmap): String {
+    // Function to classify the image and get confidence levels
+    fun classifyImage(bitmap: Bitmap): Pair<String, String> {
         val tfliteInterpreter: Interpreter by lazy {
             Interpreter(loadModelFile(this))
         }
@@ -94,32 +92,30 @@ class status : AppCompatActivity() {
         val input = preprocessImage(bitmap)
 
         // Define output shape based on your model
-        val output = Array(1) { Array(25200) { FloatArray(85) } } // Adjust to match your model output shape
+        val output = Array(1) { FloatArray(5) } // Assuming 5 classes: Bumblefoot, Fowlpox, etc.
 
         // Run the model inference
         tfliteInterpreter.run(input, output)
 
-        // Process the output to get the index of the highest score for each bounding box
-        val classScores = FloatArray(85) // Assuming you have 85 classes
-        for (i in output[0].indices) {
-            val currentClassScores = output[0][i]
-            for (j in currentClassScores.indices) {
-                classScores[j] += currentClassScores[j] // Aggregate scores for each class
-            }
-        }
+        // Get confidence scores and find the max score
+        val confidences = output[0]
+        val maxPos = confidences.indices.maxByOrNull { confidences[it] } ?: -1
+        val maxConfidence = confidences[maxPos]
 
-        // Find the index of the class with the maximum score
-        val maxIndex = classScores.indices.maxByOrNull { classScores[it] } ?: -1
-
-        // Define class labels (update this based on your model's classes)
+        // Define class labels (update these based on your model's classes)
         val classes = arrayOf("Bumblefoot", "Fowlpox", "Coryza", "CRD", "Healthy")
 
-        // Return the class label corresponding to the max index
-        return if (maxIndex != -1) {
-            classes[maxIndex]
+        // Create confidence string to display
+        val confidenceText = StringBuilder()
+        for (i in classes.indices) {
+            confidenceText.append("${classes[i]}: %.1f%%\n".format(confidences[i] * 100))
+        }
+
+        // Return the class label with the highest confidence and the confidence string
+        return if (maxPos != -1) {
+            Pair(classes[maxPos], confidenceText.toString())
         } else {
-            "Unknown"
+            Pair("Unknown", "Confidence not available")
         }
     }
-
 }

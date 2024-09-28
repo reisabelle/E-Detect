@@ -1,4 +1,4 @@
-package com.example.thesis
+package com.example.e_detect
 
 import android.content.Intent
 import android.os.Bundle

@@ -1,4 +1,4 @@
-package com.example.e_detect
+package com.example.thesis
 
 import android.content.Intent
 import android.graphics.Bitmap
@@ -21,7 +21,7 @@ class status : AppCompatActivity() {
     private lateinit var confidenceTextView: TextView
 
     private val confidenceThreshold = 0.5f
-    private val classes = listOf("Bumblefoot", "Fowlpox", "Coryza", "CRD", "Healthy")
+    private val classes = listOf("Bumblefoot", "Fowlpox", "Healthy", "Coryza")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +44,10 @@ class status : AppCompatActivity() {
                 val bitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, uri)
 
                 imageView.setImageBitmap(bitmap)
-                classifyImage(bitmap)
+
+                // Enhance image before classification
+                val enhancedBitmap = enhanceImageResolution(bitmap)
+                classifyImage(enhancedBitmap)
             } catch (e: IOException) {
                 Log.e("ImageClassification", "Error loading image: ${e.message}")
                 diseaseTextView.text = "Error loading image"
@@ -59,7 +62,7 @@ class status : AppCompatActivity() {
 
     // Load the TFLite model (GPU delegate is now optional)
     private fun loadModel(): Interpreter {
-        val modelFile = "model(1).tflite" // Ensure this file is correctly named and placed in assets
+        val modelFile = "model11.tflite" // Ensure this file is correctly named and placed in assets
         val assetFileDescriptor = assets.openFd(modelFile)
         val inputStream = assetFileDescriptor.createInputStream()
         val fileChannel = inputStream.channel
@@ -69,25 +72,52 @@ class status : AppCompatActivity() {
 
         val options = Interpreter.Options()
 
-        // GPU delegate is optional
-        try {
-            // Temporarily commenting out GPU delegate for testing, as it could cause crashes
-            // val gpuDelegate = GpuDelegate()
-            // options.addDelegate(gpuDelegate)
-        } catch (e: Exception) {
-            Log.e("InterpreterOptions", "Error initializing GPU delegate: ${e.message}")
-        }
-
         return Interpreter(mappedByteBuffer, options)
     }
 
-    // Preprocess the image before feeding into the model
+    // Enhance image resolution by upscaling and sharpening
+    private fun enhanceImageResolution(bitmap: Bitmap): Bitmap {
+        val upscaleFactor = 2
+        val width = bitmap.width * upscaleFactor
+        val height = bitmap.height * upscaleFactor
+
+        val highResBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true)
+
+        return sharpenImage(highResBitmap)
+    }
+
+    // Sharpen the upscaled image
+    private fun sharpenImage(bitmap: Bitmap): Bitmap {
+        val sharpenKernel = floatArrayOf(
+            0f, -1f, 0f,
+            -1f, 5f, -1f,
+            0f, -1f, 0f
+        )
+        val rs = android.renderscript.RenderScript.create(this)
+        val convolveFilter = android.renderscript.ScriptIntrinsicConvolve3x3.create(
+            rs, android.renderscript.Element.U8_4(rs)
+        )
+        val inputAllocation = android.renderscript.Allocation.createFromBitmap(rs, bitmap)
+        val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, bitmap.config)
+        val outputAllocation = android.renderscript.Allocation.createFromBitmap(rs, outputBitmap)
+        convolveFilter.setInput(inputAllocation)
+        convolveFilter.setCoefficients(sharpenKernel)
+        convolveFilter.forEach(outputAllocation)
+        outputAllocation.copyTo(outputBitmap)
+
+        return outputBitmap
+    }
+
+    // Preprocess the image for quantized models (8-bit integer values)
     private fun preprocessImage(bitmap: Bitmap): ByteBuffer {
         val inputSize = 224
-        val byteBuffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
+        val byteBuffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3)
         byteBuffer.order(java.nio.ByteOrder.nativeOrder())
 
-        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, false)
+        // Resize with bicubic interpolation for better quality
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
+
+        // Normalize the pixel values and prepare buffer
         val intValues = IntArray(inputSize * inputSize)
         scaledBitmap.getPixels(
             intValues,
@@ -100,9 +130,14 @@ class status : AppCompatActivity() {
         )
 
         for (pixel in intValues) {
-            byteBuffer.putFloat(((pixel shr 16) and 0xFF) / 255.0f) // Red
-            byteBuffer.putFloat(((pixel shr 8) and 0xFF) / 255.0f)  // Green
-            byteBuffer.putFloat((pixel and 0xFF) / 255.0f)          // Blue
+            val red = (pixel shr 16) and 0xFF
+            val green = (pixel shr 8) and 0xFF
+            val blue = pixel and 0xFF
+
+            // Put the pixel values directly as bytes (0-255 range for quantized model)
+            byteBuffer.put(red.toByte())
+            byteBuffer.put(green.toByte())
+            byteBuffer.put(blue.toByte())
         }
 
         return byteBuffer
@@ -114,8 +149,8 @@ class status : AppCompatActivity() {
 
         val input = preprocessImage(bitmap)
 
-        // Define output shape based on your model
-        val output = Array(1) { FloatArray(5) } // Assuming 5 classes: Bumblefoot, Fowlpox, etc.
+        // Define output shape based on your model (quantized output)
+        val output = Array(1) { ByteArray(4) } // Assuming 4 classes
 
         // Run the model inference
         try {
@@ -127,8 +162,14 @@ class status : AppCompatActivity() {
             return
         }
 
-        // Get confidence scores and find the max score
-        val confidences = output[0]
+        // Dequantize the output based on correct model parameters (adjust scale and zero point)
+        val outputScale = 1.0f / 255.0f // (0.00392157f) Example scale (1.0 / 255.0)
+        val outputZeroPoint = 0 // Example zero point
+
+        // Convert byte output to float confidence scores
+        val confidences = output[0].map { (it.toInt() and 0xFF) * outputScale + outputZeroPoint }
+
+        // Get the class with the highest confidence
         val maxPos = confidences.indices.maxByOrNull { confidences[it] } ?: -1
         val maxConfidence = confidences[maxPos]
 

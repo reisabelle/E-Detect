@@ -15,12 +15,12 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
 class status : AppCompatActivity() {
-    private lateinit var backButton: ImageView
     private lateinit var imageView: ImageView
     private lateinit var diseaseTextView: TextView
     private lateinit var confidenceTextView: TextView
+    private lateinit var description: TextView
 
-    private val confidenceThreshold = 0.5f
+    private val confidenceThreshold = 0.3f
     private val classes = listOf("Bumblefoot", "Fowlpox", "Healthy", "Coryza")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,12 +30,7 @@ class status : AppCompatActivity() {
         imageView = findViewById(R.id.imageView2)
         diseaseTextView = findViewById(R.id.disease)
         confidenceTextView = findViewById(R.id.confidence)
-
-        backButton = findViewById(R.id.backbtn)
-        backButton.setOnClickListener {
-            val intent = Intent(this, StartingUi::class.java)
-            startActivity(intent)
-        }
+        description = findViewById(R.id.description)
 
         val imageUri = intent.getStringExtra("imageUri")
         if (imageUri != null) {
@@ -62,7 +57,7 @@ class status : AppCompatActivity() {
 
     // Load the TFLite model (GPU delegate is now optional)
     private fun loadModel(): Interpreter {
-        val modelFile = "model.tflite" // Ensure this file is correctly named and placed in assets
+        val modelFile = "model1.tflite" // Ensure this file is correctly named and placed in assets
         val assetFileDescriptor = assets.openFd(modelFile)
         val inputStream = assetFileDescriptor.createInputStream()
         val fileChannel = inputStream.channel
@@ -176,11 +171,33 @@ class status : AppCompatActivity() {
         // Check if the max confidence is above the threshold
         if (maxConfidence > confidenceThreshold) {
             val result = classes[maxPos]
-            diseaseTextView.text = "Disease: $result"
-            confidenceTextView.text = "Confidence: ${"%.1f".format(maxConfidence * 100)}%"
+            diseaseTextView.text = "RESULT: $result"
+            confidenceTextView.text = "CONFIDENCE: ${"%.1f".format(maxConfidence * 100)}%"
+
+            if (maxPos == classes.indexOf("Bumblefoot")) {
+                description.text = "Bumblefoot: A Common Foot Problem in Poultry\n" +
+                        "\nBumblefoot is a painful foot condition that affects poultry, particularly birds kept indoors or on wire mesh floors. It is caused by pressure sores or infections that develop on the bird's feet, often due to poor foot hygiene or unsuitable living conditions.\n" +
+                        "\nNote: Early detection and treatment of bumblefoot are important to prevent complications and improve the chicken's quality of life. Consult with a veterinarian for diagnosis and appropriate treatment."
+
+            } else if (maxPos == classes.indexOf("Fowlpox")) {
+                description.text = "Fowlpox: A Viral Disease Affecting Poultry\n" +
+                        "\nFowlpox is a contagious viral disease that primarily affects poultry, particularly chickens and turkeys. It is characterized by the formation of wart-like lesions on various parts of the bird's body, including the comb, wattles, beak, and sometimes the feet and legs.\n" +
+                        "\nNote: Early detection and treatment of fowlpox are important to prevent complications and improve the chicken's quality of life. Consult with a veterinarian for diagnosis and appropriate treatment."
+
+            } else if (maxPos == classes.indexOf("Healthy")) {
+                description.text = "Healthy chickens are essential for a successful poultry-keeping experience. By providing them with the right care, you can ensure that your birds thrive and produce high-quality eggs."
+
+            } else if (maxPos == classes.indexOf("Coryza")) {
+                description.text = "Coryza: A Respiratory Disease in Poultry\n" +
+                        "\nCoryza, also known as infectious rhinotracheitis or cold in poultry, is a highly contagious respiratory disease caused by a virus. It primarily affects the upper respiratory tract, causing symptoms similar to a common cold in humans.\n" +
+                        "\nNote: Early detection and treatment of coryza are important to prevent complications and improve the chicken's quality of life. Consult with a veterinarian for diagnosis and appropriate treatment."
+            }
+
         } else {
-            diseaseTextView.text = "Unknown"
-            confidenceTextView.text = "Confidence: Not available"
+            diseaseTextView.text = "RESULT: Unknown"
+            confidenceTextView.text = "CONFIDENCE: Not available"
+            description.text = "No Description"
         }
+
     }
 }

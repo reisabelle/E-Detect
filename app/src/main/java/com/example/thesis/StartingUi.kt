@@ -11,15 +11,20 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.tensorflow.lite.Interpreter
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,13 +32,20 @@ import java.util.Locale
 class StartingUi : AppCompatActivity() {
 
     private lateinit var imageView: ImageView
+    private lateinit var textView: TextView
+    private lateinit var textView2: TextView
     private val REQUEST_CODE_CAMERA = 1
     private val REQUEST_CODE_GALLERY = 2
+
+    private val confidenceThreshold = 0.5f
+    private val classes = listOf("Chicken", "Other Objects")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        textView = findViewById(R.id.textView)
+        textView2 = findViewById(R.id.textView2)
         imageView = findViewById(R.id.imageView)
 
         val cameraButton = findViewById<Button>(R.id.camera)
@@ -46,7 +58,6 @@ class StartingUi : AppCompatActivity() {
             } else {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE), REQUEST_CODE_CAMERA)
             }
-
         }
 
         galleryButton.setOnClickListener {
@@ -97,15 +108,152 @@ class StartingUi : AppCompatActivity() {
                     imageView.setImageBitmap(imageBitmap)
                     saveImageToStorage(imageBitmap)
                     setImage(imageBitmap)
+
+                    val enhancedBitmap = enhanceImageResolution(imageBitmap)
+                    classifyImage(enhancedBitmap)
                 }
                 REQUEST_CODE_GALLERY -> {
                     val selectedImage: Uri? = data?.data
                     imageView.setImageURI(selectedImage)
                     setImage(selectedImage)
+
+                    val bitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, selectedImage)
+                    val enhancedBitmap = enhanceImageResolution(bitmap)
+                    classifyImage(enhancedBitmap)
                 }
             }
         }
     }
+
+    // Load the TFLite model (GPU delegate is now optional)
+    private fun loadModel(): Interpreter {
+        val modelFile = "modelc_300e-1^-6.tflite" // Ensure this file is correctly named and placed in assets
+        val assetFileDescriptor = assets.openFd(modelFile)
+        val inputStream = assetFileDescriptor.createInputStream()
+        val fileChannel = inputStream.channel
+        val startOffset = assetFileDescriptor.startOffset
+        val declaredLength = assetFileDescriptor.declaredLength
+        val mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+
+        val options = Interpreter.Options()
+
+        return Interpreter(mappedByteBuffer, options)
+    }
+
+    // Enhance image resolution by upscaling and sharpening
+    private fun enhanceImageResolution(bitmap: Bitmap): Bitmap {
+        val upscaleFactor = 2
+        val width = bitmap.width * upscaleFactor
+        val height = bitmap.height * upscaleFactor
+
+        val highResBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true)
+
+        return sharpenImage(highResBitmap)
+    }
+
+    // Sharpen the upscaled image
+    private fun sharpenImage(bitmap: Bitmap): Bitmap {
+        val sharpenKernel = floatArrayOf(
+            0f, -1f, 0f,
+            -1f, 5f, -1f,
+            0f, -1f, 0f
+        )
+        val rs = android.renderscript.RenderScript.create(this)
+        val convolveFilter = android.renderscript.ScriptIntrinsicConvolve3x3.create(
+            rs, android.renderscript.Element.U8_4(rs)
+        )
+        val inputAllocation = android.renderscript.Allocation.createFromBitmap(rs, bitmap)
+        val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, bitmap.config)
+        val outputAllocation = android.renderscript.Allocation.createFromBitmap(rs, outputBitmap)
+        convolveFilter.setInput(inputAllocation)
+        convolveFilter.setCoefficients(sharpenKernel)
+        convolveFilter.forEach(outputAllocation)
+        outputAllocation.copyTo(outputBitmap)
+
+        return outputBitmap
+    }
+
+    // Preprocess the image for quantized models (8-bit integer values)
+    private fun preprocessImage(bitmap: Bitmap): ByteBuffer {
+        val inputSize = 224
+        val byteBuffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3)
+        byteBuffer.order(java.nio.ByteOrder.nativeOrder())
+
+        // Resize with bicubic interpolation for better quality
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
+
+        // Normalize the pixel values and prepare buffer
+        val intValues = IntArray(inputSize * inputSize)
+        scaledBitmap.getPixels(
+            intValues,
+            0,
+            scaledBitmap.width,
+            0,
+            0,
+            scaledBitmap.width,
+            scaledBitmap.height
+        )
+
+        for (pixel in intValues) {
+            val red = (pixel shr 16) and 0xFF
+            val green = (pixel shr 8) and 0xFF
+            val blue = pixel and 0xFF
+
+            // Put the pixel values directly as bytes (0-255 range for quantized model)
+            byteBuffer.put(red.toByte())
+            byteBuffer.put(green.toByte())
+            byteBuffer.put(blue.toByte())
+        }
+
+        return byteBuffer
+    }
+
+    // Function to classify the image and get confidence levels
+    private fun classifyImage(bitmap: Bitmap) {
+        val tfliteInterpreter by lazy { loadModel() }
+
+        val input = preprocessImage(bitmap)
+
+        // Define output shape based on your model (quantized output)
+        val output = Array(1) { ByteArray(2) } // Assuming 4 classes, adjust based on your actual model
+
+        // Run the model inference
+        try {
+            tfliteInterpreter.run(input, output)
+        } catch (e: Exception) {
+            Log.e("ModelInference", "Error during model inference: ${e.message}")
+            return
+        }
+
+        // Dequantize the output based on the correct model parameters
+        val outputScale = 0.00392157f // Example scale (1.0 / 255.0) for quantized models
+        val outputZeroPoint = 0 // Zero point is usually 0 for quantized models
+
+        // Convert byte output to float confidence scores
+        val confidences = output[0].map { (it.toInt() and 0xFF) * outputScale + outputZeroPoint }
+
+        // Get the class with the highest confidence
+        val maxPos = confidences.indices.maxByOrNull { confidences[it] } ?: -1
+        val maxConfidence = confidences[maxPos]
+
+        // Check if the max confidence is above the threshold
+        if (maxPos != -1 && maxConfidence > confidenceThreshold) {
+            // If "Chicken" is detected
+            if (maxPos == classes.indexOf("Chicken")) {
+                textView.text = "Chicken Detected!"
+                textView2.text = "Click image to see health status"
+            } else {
+                // If another object is detected
+                textView.text = "No Chicken Found"
+                imageView.setOnClickListener(null)  // Prevent navigation if no chicken is detected
+            }
+        } else {
+            // If confidence is too low
+            textView.text = "Confidence too low\nNo Chicken Found"
+            imageView.setOnClickListener(null)
+        }
+    }
+
 
     private fun setImage(image: Any?) {
         when (image) {
@@ -114,7 +262,6 @@ class StartingUi : AppCompatActivity() {
                 imageView.isClickable = true
                 if (image != null && imageView.drawable != null) {
                     Toast.makeText(this, "Image displayed!", Toast.LENGTH_SHORT).show()
-                    Toast.makeText(this, "Click image to see health status", Toast.LENGTH_SHORT).show()
                 }
             }
             is Uri? -> {
@@ -123,7 +270,6 @@ class StartingUi : AppCompatActivity() {
                     imageView.isClickable = imageView.drawable != null
                     if (image != null && imageView.drawable != null) {
                         Toast.makeText(this, "Image displayed!", Toast.LENGTH_SHORT).show()
-                        Toast.makeText(this, "Click image to see health status", Toast.LENGTH_SHORT).show()
                     }
                 }
             }

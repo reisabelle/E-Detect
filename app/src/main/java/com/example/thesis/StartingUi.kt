@@ -44,6 +44,25 @@ class StartingUi : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val toolbar = findViewById<MaterialToolbar>(R.id.materialToolbar2)
+        setSupportActionBar(toolbar)
+        toolbar.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.about -> {
+                    val intent = Intent(this, about::class.java)
+                    startActivity(intent)
+                    true
+                }
+
+                R.id.diseases -> {
+                    val intent = Intent(this, diseases::class.java)
+                    startActivity(intent)
+                    true
+                }
+
+                else -> false
+            }
+        
         textView = findViewById(R.id.textView)
         textView2 = findViewById(R.id.textView2)
         imageView = findViewById(R.id.imageView)
@@ -72,6 +91,11 @@ class StartingUi : AppCompatActivity() {
         if (imageView.drawable == null){
             Toast.makeText(this, "No Image Displayed", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu, menu)
+        return true
     }
 
     private fun openCamera() {

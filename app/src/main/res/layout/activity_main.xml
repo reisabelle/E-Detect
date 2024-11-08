@@ -6,6 +6,20 @@
     android:background="@drawable/background"
     tools:context=".StartingUi">
 
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/materialToolbar2"
+        android:layout_width="match_parent"
+        android:layout_height="65dp"
+        android:background="#00FAF9F9"
+        android:minHeight="?attr/actionBarSize"
+        android:theme="?attr/actionBarTheme"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:title="Disease Detection"
+        app:titleCentered="true"
+        app:titleTextColor="#00FFFFFF" />
+
     <Button
         android:id="@+id/camera"
         android:layout_width="wrap_content"

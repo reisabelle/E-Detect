@@ -175,21 +175,18 @@ class status : AppCompatActivity() {
             confidenceTextView.text = "CONFIDENCE: ${"%.1f".format(maxConfidence * 100)}%"
 
             if (maxPos == classes.indexOf("Bumblefoot")) {
-                description.text = "Bumblefoot: A Common Foot Problem in Poultry\n" +
-                        "\nBumblefoot is a painful foot condition that affects poultry, particularly birds kept indoors or on wire mesh floors. It is caused by pressure sores or infections that develop on the bird's feet, often due to poor foot hygiene or unsuitable living conditions.\n" +
+                description.text = "\nBumblefoot is a bacterial infection affecting the chicken's footpad" +
                         "\nNote: Early detection and treatment of bumblefoot are important to prevent complications and improve the chicken's quality of life. Consult with a veterinarian for diagnosis and appropriate treatment."
 
             } else if (maxPos == classes.indexOf("Fowlpox")) {
-                description.text = "Fowlpox: A Viral Disease Affecting Poultry\n" +
-                        "\nFowlpox is a contagious viral disease that primarily affects poultry, particularly chickens and turkeys. It is characterized by the formation of wart-like lesions on various parts of the bird's body, including the comb, wattles, beak, and sometimes the feet and legs.\n" +
+                description.text = "\nFowlpox viral infection that causes skin lesions" +
                         "\nNote: Early detection and treatment of fowlpox are important to prevent complications and improve the chicken's quality of life. Consult with a veterinarian for diagnosis and appropriate treatment."
 
             } else if (maxPos == classes.indexOf("Healthy")) {
-                description.text = "Healthy chickens are essential for a successful poultry-keeping experience. By providing them with the right care, you can ensure that your birds thrive and produce high-quality eggs."
-
+                description.text = "The chicken appears free of any common ailments, indicating good health"
+                
             } else if (maxPos == classes.indexOf("Coryza")) {
-                description.text = "Coryza: A Respiratory Disease in Poultry\n" +
-                        "\nCoryza, also known as infectious rhinotracheitis or cold in poultry, is a highly contagious respiratory disease caused by a virus. It primarily affects the upper respiratory tract, causing symptoms similar to a common cold in humans.\n" +
+                description.text = "\nCoryza is arespiratory infection with symptoms like facial swelling." +
                         "\nNote: Early detection and treatment of coryza are important to prevent complications and improve the chicken's quality of life. Consult with a veterinarian for diagnosis and appropriate treatment."
             }
 

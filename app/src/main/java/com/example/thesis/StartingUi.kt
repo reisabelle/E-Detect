@@ -151,7 +151,7 @@ class StartingUi : AppCompatActivity() {
 
     // Load the TFLite model (GPU delegate is now optional)
     private fun loadModel(): Interpreter {
-        val modelFile = "model.tflite" // Ensure this file is correctly named and placed in assets
+        val modelFile = "modelc_nov20.tflite" // Ensure this file is correctly named and placed in assets
         val assetFileDescriptor = assets.openFd(modelFile)
         val inputStream = assetFileDescriptor.createInputStream()
         val fileChannel = inputStream.channel

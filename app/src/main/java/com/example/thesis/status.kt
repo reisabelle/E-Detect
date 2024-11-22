@@ -29,7 +29,6 @@ class status : AppCompatActivity() {
 
         imageView = findViewById(R.id.imageView2)
         diseaseTextView = findViewById(R.id.disease)
-        confidenceTextView = findViewById(R.id.confidence)
         description = findViewById(R.id.description)
 
         val imageUri = intent.getStringExtra("imageUri")

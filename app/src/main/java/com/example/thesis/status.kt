@@ -17,7 +17,6 @@ import java.nio.channels.FileChannel
 class status : AppCompatActivity() {
     private lateinit var imageView: ImageView
     private lateinit var diseaseTextView: TextView
-    private lateinit var confidenceTextView: TextView
     private lateinit var description: TextView
 
     private val confidenceThreshold = 0.3f
@@ -45,11 +44,9 @@ class status : AppCompatActivity() {
             } catch (e: IOException) {
                 Log.e("ImageClassification", "Error loading image: ${e.message}")
                 diseaseTextView.text = "Error loading image"
-                confidenceTextView.text = "Please try again"
             } catch (e: Exception) {
                 Log.e("ImageClassification", "Unknown error: ${e.message}")
                 diseaseTextView.text = "Unknown error"
-                confidenceTextView.text = "Please try again"
             }
         }
     }
@@ -170,8 +167,7 @@ class status : AppCompatActivity() {
         // Check if the max confidence is above the threshold
         if (maxConfidence > confidenceThreshold) {
             val result = classes[maxPos]
-            diseaseTextView.text = "RESULT: $result"
-            confidenceTextView.text = "CONFIDENCE: ${"%.1f".format(maxConfidence * 100)}%"
+            diseaseTextView.text = "$result"
 
             if (maxPos == classes.indexOf("Bumblefoot")) {
                 description.text = "\nBumblefoot is a bacterial infection affecting the chicken's footpad" +
@@ -190,8 +186,7 @@ class status : AppCompatActivity() {
             }
 
         } else {
-            diseaseTextView.text = "RESULT: Unknown"
-            confidenceTextView.text = "CONFIDENCE: Not available"
+            diseaseTextView.text = "Unknown"
             description.text = "No Description"
         }
 
